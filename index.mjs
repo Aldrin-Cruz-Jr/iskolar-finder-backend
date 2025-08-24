@@ -1,12 +1,14 @@
 import express from 'express'
 import cors from 'cors'
 import mongoose from 'mongoose'
+import dotenv from 'dotenv'
 
+dotenv.config()
 //initialize express server
 const app = express()
 
 //set-up database
-mongoose.connect()
+mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('Connected to database'))
     .then((error) => console.log(`Error ${error}`))
 

@@ -1,1 +1,0 @@
-"# iskolar-finder-backend" 

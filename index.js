@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const UserModel = require("./models/Users");
 const dotenv = require("dotenv");
+const admin = require("firebase-admin");
 // this loads environment variables from a .env file into process.env
 dotenv.config();
 
@@ -15,29 +16,69 @@ app.use(
     })
 );
 
+// Initialize Firebase Admin with the service account
+const serviceAccount = require("./iskolarfinder-firebase-service-account.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+});
+
+// Middleware: Verity Firebase ID Token
+const verifyToken = async (req, res, next) => {
+    const token = req.headers.authorization?.split(" ")[1]; // This expects the "Bearer <token>"
+    if (!token) return res.status(401).json({ success: false, message: "No token provided" });
+
+    try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        req.user = decoded;
+        next();
+    } catch (err) {
+        res.status(401).json({ success: false, message: "Invalid or expired token" })
+    }
+};
+
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log("Connected to MongoDB"))
     .catch((err) => console.log(err));
 
-// Login Route
-app.post("/login", async (req, res) => {
+// SigUp route
+
+app.post('/signup', verifyToken, async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { name } = req.body;
+        const { uid, email } = req.user;
 
-        const user = await UserModel.findOne({ email });
+        let user = await UserModel.findOne({ firebaseUid: uid });
+        if (user) {
+            return res.json({ success: true, user });
+        }
+
+        user = await UserModel.create({
+            firebaseUid: uid,
+            email,
+            name,
+        });
+
+        res.json({ success: true, user });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
+    }
+});
+
+// Login Route
+app.post("/login", verifyToken, async (req, res) => {
+    try {
+        const { uid, email } = req.user;
+
+        const user = await UserModel.findOne({ firebaseUid: uid });
         if (!user) {
-            return res.status(401).json({ success: false, message: "No record exists" });
-        }
-        
-        if (user.password !== password) {
-            return res.status(401).json({ success: false, message: "Incorrect password" });
+            return res.status(404).json({ success: false, message: "No record exists" });
         }
 
-        // if Login is Successful
-        return res.json({
+        res.json({
             success: true,
             message: "Login successful",
-            user: { id: user._id, email: user.email },
+            user: { id: user._id, email: user.email, name: user.name },
         });
     } catch (err) {
         console.error(err);
@@ -45,16 +86,31 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// SigUp route
-
-app.post('/signup', async (req, res) => {
+// GET the profile
+app.get("/profile", verifyToken, async (req, res) => {
     try {
-        const user = await UserModel.create(req.body);
-        res.json({ success: true, user });
+        const { uid } = req.user;
+
+        const user = await UserModel.findOne({ firebaseUid: uid });
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.json({
+            success: true,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+            }
+        });
     } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+        console.error(err);
+        res.status(500).json({ success: false, message: "Server error"});
     }
 });
+
+
 
 const PORT = process.env.PORT || 3001;
 

@@ -10,9 +10,10 @@ const UserSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    password: {
+    firebaseUid: {
         type: String,
-        required: true
+        required: true,
+        unique: true,
     }
 })
 

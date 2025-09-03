@@ -1,3 +1,7 @@
 # environment
 .env
 .gitignore
+
+iskolarfinder-firebase-service-account.json
+
+node_modules/
